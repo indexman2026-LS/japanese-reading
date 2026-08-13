@@ -267,6 +267,33 @@
   .reader .g-tag.key { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
   .reader .g-empty { font-size:12.5px; color:var(--ink-faint); font-family:var(--sans); font-style:italic; }
 
+  /* reader grammar cards: inline explanation for each matched grammar */
+  .reader .g-tags .g-list { width:100%; }
+  .reader .g-list { display:flex; flex-direction:column; gap:9px; }
+  .reader .g-card { border:1px solid var(--line); border-radius:11px; background:var(--paper); overflow:hidden; }
+  .reader .g-card .g-head {
+    display:flex; align-items:center; gap:9px; padding:9px 12px; cursor:pointer; user-select:none; flex-wrap:wrap;
+  }
+  .reader .g-card.key .g-head { background:var(--accent-soft); }
+  .reader .g-card .g-head .lv-badge { font-size:10px; padding:1px 7px; }
+  .reader .g-card .g-head .pattern { font-family:var(--serif); font-size:16px; font-weight:700; color:var(--ink); }
+  .reader .g-card .g-head .meaning { font-family:var(--sans); font-size:12.5px; color:var(--ink-soft); flex:1 1 130px; line-height:1.45; }
+  .reader .g-card .g-head .go { font-family:var(--sans); font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .reader .g-card .g-head .go:hover { text-decoration:underline; }
+  .reader .g-card .g-head .chev { color:var(--ink-faint); font-size:10px; transition:transform .12s; }
+  .reader .g-card.open .g-head .chev { transform:rotate(90deg); }
+  .reader .g-card .g-detail { display:none; border-top:1px dashed var(--line); padding:10px 12px 12px; }
+  .reader .g-card.open .g-detail { display:block; animation:gopen .15s ease; }
+  .reader .g-card .formation { font-family:var(--sans); font-size:12.5px; color:var(--ink-soft); background:var(--accent-soft); padding:4px 10px; border-radius:6px; margin-bottom:8px; display:inline-block; }
+  .reader .g-card .note { font-family:var(--sans); font-size:12.5px; color:var(--ink-soft); line-height:1.6; margin-bottom:8px; }
+  .reader .g-card .ex { margin-top:7px; padding:8px 11px; background:var(--bg); border:1px solid var(--line); border-radius:8px; }
+  .reader .g-card .ex-jp { font-family:var(--serif); font-size:14.5px; color:var(--ink); line-height:1.6; display:flex; align-items:center; gap:7px; }
+  .reader .g-card .ex-jp .spk { font-size:13px; color:var(--ink-faint); cursor:pointer; font-family:var(--sans); }
+  .reader .g-card .ex-jp .spk:hover { color:var(--accent); }
+  .reader .g-card .ex-r { font-family:var(--sans); font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
+  .reader .g-card .ex-zh { font-family:var(--sans); font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .reader .g-card .ex-src { font-size:10.5px; color:var(--accent); margin-top:2px; font-family:var(--sans); }
+
   /* ===== Vocab list ===== */
   .vocab-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
   .vocab-card {
@@ -394,7 +421,7 @@
       <div class="end-mark">· · ·</div>
       <div class="post-stats" id="r-post"></div>
       <div class="g-panel" id="r-gpanel">
-        <h4>本文相关语法 <span style="font-size:10px;color:var(--accent);letter-spacing:0;">★=重点练习</span></h4>
+        <h4>本文相关语法 <span style="font-size:10px;color:var(--accent);letter-spacing:0;">★=重点练习 · 点句型展开解说</span></h4>
         <div class="g-tags" id="r-gtags"></div>
       </div>
     </article>
@@ -611,6 +638,31 @@
     });
   }
 
+  // render one grammar entry as an inline explainer card for the reader panel
+  function gCardHTML(g, isKey){
+    const exs = (g.examples||[]).map(ex=>`
+      <div class="ex">
+        <div class="ex-jp"><span>${escapeHtml(ex.jp)}</span><span class="spk" data-spk="${escapeHtml(ex.jp)}">🔊</span></div>
+        ${ex.r?`<div class="ex-r">${escapeHtml(ex.r)}</div>`:''}
+        ${ex.zh?`<div class="ex-zh">${escapeHtml(ex.zh)}</div>`:''}
+        ${ex.src?`<div class="ex-src">◇ ${escapeHtml(ex.src)}</div>`:''}
+      </div>`).join('');
+    const detail =
+      (g.formation?`<div class="formation">${escapeHtml(g.formation)}</div>`:'') +
+      (g.note?`<div class="note">${escapeHtml(g.note)}</div>`:'') +
+      exs;
+    return `<div class="g-card ${isKey?'key open':''}">
+      <div class="g-head">
+        <span class="lv-badge ${g.level}">${g.level}</span>
+        <span class="pattern">${escapeHtml(g.pattern)}</span>
+        <span class="meaning">${escapeHtml(g.meaning||'')}</span>
+        <a class="go" data-p="${escapeHtml(g.pattern)}" title="到文法页查看">文法页 ↗</a>
+        <span class="chev">▶</span>
+      </div>
+      ${detail?`<div class="g-detail">${detail}</div>`:''}
+    </div>`;
+  }
+
   function openArticle(id){
     const a = articles.find(x=>x.id===id);
     if(!a) return;
@@ -636,29 +688,30 @@
       updateStats(); renderArticles();
       m.textContent='✓ 已读'; m.classList.add('done');
     });
-    // article grammar panel: 重点练习 (gk) first, then auto-detected
+    // article grammar panel: 重点练习 (gk) first, then auto-detected — each shown with its explanation
     const gtags = document.getElementById('r-gtags');
-    const gkTags = (a.gk||[]).map(p => {
+    const gkList = (a.gk||[]).map(p => {
       // exact match, or combined "X/Y" pattern that starts/contains the gk
       let g = grammar.find(x => x.pattern === p);
       if (!g) g = grammar.find(x => x.pattern.startsWith(p));
       if (!g) g = grammar.find(x => p.startsWith(x.pattern) && x.pattern.length >= 3);
       return g;
-    }).filter(Boolean)
-      .map(g => `<span class="g-tag key" data-p="${escapeHtml(g.pattern)}"><span class="lv ${g.level}">★${g.level}</span>${escapeHtml(g.pattern)}</span>`)
-      .join('');
+    }).filter(Boolean);
     const hits = articleGrammar(a);
-    let ghtml = gkTags;
-    if (hits.length){
-      ghtml += hits.map(h=>
-        `<span class="g-tag" data-p="${escapeHtml(h.g.pattern)}"><span class="lv ${h.g.level}">${h.g.level}</span>${escapeHtml(h.g.pattern)}</span>`
-      ).join('');
-    }
-    if(!ghtml){
+    if(!gkList.length && !hits.length){
       gtags.innerHTML = '<span class="g-empty">未检测到明显语法点，可到「文法」页按级别浏览。</span>';
     } else {
-      gtags.innerHTML = ghtml;
-      gtags.querySelectorAll('.g-tag').forEach(t=> t.addEventListener('click', ()=> gotoGrammar(t.dataset.p)));
+      gtags.innerHTML = '<div class="g-list">' +
+        gkList.map(g=>gCardHTML(g,true)).join('') +
+        hits.map(h=>gCardHTML(h.g,false)).join('') +
+        '</div>';
+      gtags.querySelectorAll('.g-card .g-head').forEach(head=>{
+        head.addEventListener('click', ()=> head.parentElement.classList.toggle('open'));
+      });
+      gtags.querySelectorAll('.go').forEach(a=>{
+        a.addEventListener('click', e=>{ e.stopPropagation(); gotoGrammar(a.dataset.p); });
+      });
+      gtags.querySelectorAll('[data-spk]').forEach(b=> b.addEventListener('click', e=>{ e.stopPropagation(); speak(b.dataset.spk); }));
     }
     readerEl.querySelectorAll('.w').forEach(span=>{
       span.addEventListener('click', e=>{ e.stopPropagation(); showTooltip(span); });
